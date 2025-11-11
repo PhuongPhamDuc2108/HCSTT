@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Suy Diễn AI - Triangle Expert System</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Menu -->
+        <div class="sidebar">
+            <h2>🧠 Hệ Thống AI</h2>
+            <ul>
+                <li class="menu-item active" data-target="rules-section">📚 Quản lý Luật</li>
+                <li class="menu-item" data-target="fpg-section">📊 Biểu đồ FPG</li>
+                <li class="menu-item" data-target="rpg-section">🔄 Biểu đồ RPG</li>
+                <li class="menu-item" data-target="forward-section">➡️ Suy diễn Tiến</li>
+                <li class="menu-item" data-target="backward-section">⬅️ Suy diễn Lùi</li>
+            </ul>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            
+            <!-- 1. QUẢN LÝ LUẬT -->
+            <div id="rules-section" class="content-section active">
+                <h1>📚 Quản lý Cơ sở Tri thức</h1>
+                <div class="toolbar">
+                    <label for="fileInput" class="btn btn-primary">📁 Tải lên file luật (Excel/CSV)</label>
+                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="taiLenTapLuat(event)" style="display: none;">
+                    <button class="btn btn-secondary" onclick="themLuatMoi()">➕ Thêm luật</button>
+                    <input type="text" class="search-box" placeholder="🔍 Tìm kiếm luật..." id="searchBox" onkeyup="searchRules()">
+                </div>
+                <div id="uploadStatus" class="upload-status"></div>
+                
+                <table id="ruleTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Vế trái</th>
+                            <th>Vế phải</th>
+                            <th>Ghi chú (Note)</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 2. BIỂU ĐỒ FPG -->
+            <div id="fpg-section" class="content-section">
+                <h1>📊 Biểu đồ FPG (Forward Production Graph)</h1>
+                
+                <div class="draw-section">
+                    <div class="info-box">
+                        <strong>⚠️ Lưu ý:</strong> Vui lòng tải file luật và chạy suy diễn trước khi vẽ biểu đồ FPG.
+                    </div>
+                    <button class="btn btn-draw" onclick="generateFPG()">🎨 Vẽ biểu đồ FPG</button>
+                </div>
+                
+                <div id="fpgLoading" class="loading">Đang tạo biểu đồ FPG...</div>
+                <div id="fpgContainer" class="chart-container">
+                    <p class="placeholder">📊 Nhấn nút "Vẽ biểu đồ FPG" để hiển thị</p>
+                </div>
+            </div>
+
+            <!-- 3. BIỂU ĐỒ RPG -->
+            <div id="rpg-section" class="content-section">
+                <h1>🔄 Biểu đồ RPG (Rules Precedence Graph)</h1>
+                
+                <div class="draw-section">
+                    <div class="info-box">
+                        <strong>⚠️ Lưu ý:</strong> Vui lòng tải file luật trước khi vẽ biểu đồ RPG.
+                    </div>
+                    <button class="btn btn-draw" onclick="generateRPG()">🎨 Vẽ biểu đồ RPG</button>
+                </div>
+                
+                <div id="rpgLoading" class="loading">Đang tạo biểu đồ RPG...</div>
+                <div id="rpgContainer" class="chart-container">
+                    <p class="placeholder">📊 Nhấn nút "Vẽ biểu đồ RPG" để hiển thị</p>
+                </div>
+            </div>
+
+            <!-- 4. SUY DIỄN TIẾN -->
+            <div id="forward-section" class="content-section">
+                <h1>➡️ Suy diễn Tiến (Forward Chaining)</h1>
+                
+                <div class="inference-panel">
+                    <div class="inference-controls">
+                        <div class="control-group">
+                            <label for="giathiet">Giả thiết ban đầu (GT):</label>
+                            <input type="text" id="giathiet" placeholder="Ví dụ: a, b, c">
+                            <small>Nhập các fact ban đầu mà bạn đã biết</small>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="ketqua">Kết luận cần tìm (KL):</label>
+                            <input type="text" id="ketqua" placeholder="Ví dụ: S">
+                            <small>Nhập kết luận bạn muốn chứng minh</small>
+                        </div>
+                        
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="suydienChiTiet()">🚀 Thực hiện suy diễn tiến</button>
+                            <button class="btn btn-secondary" onclick="resetInference()">🔄 Đặt lại</button>
+                        </div>
+
+                        <div class="info-box" style="margin-top: 20px;">
+                            <strong>💡 Chiến lược:</strong> Forward Chaining - từ giả thiết tìm đến kết luận
+                        </div>
+                    </div>
+                    
+                    <div class="inference-results">
+                        <h3>Kết quả suy diễn tiến</h3>
+                        <div id="ketQuaSuyDienChiTiet">
+                            Nhập giả thiết và kết quả cần tìm, sau đó nhấn "Thực hiện suy diễn tiến"...
+                        </div>
+                    </div>
+                </div>
+
+                <div id="bang-qua-trinh">
+                    <h2>📋 Bảng Quá Trình Suy Diễn Tiến</h2>
+                    <table id="process-table">
+                        <thead>
+                            <tr>
+                                <th>Bước</th>
+                                <th>Luật áp dụng</th>
+                                <th>THOA</th>
+                                <th>TG</th>
+                                <th>R</th>
+                                <th>VET</th>
+                                <th>Ghi chú</th>
+                            </tr>
+                        </thead>
+                        <tbody id="process-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 5. SUY DIỄN LÙI -->
+            <div id="backward-section" class="content-section">
+                <h1>⬅️ Suy diễn Lùi (Backward Chaining)</h1>
+                
+                <div class="inference-panel">
+                    <div class="inference-controls">
+                        <div class="control-group">
+                            <label for="giathiet_backward">Giả thiết ban đầu (GT):</label>
+                            <input type="text" id="giathiet_backward" placeholder="Ví dụ: a, b, c">
+                            <small>Nhập các fact ban đầu đã biết</small>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="ketqua_backward">Kết luận cần chứng minh (KL):</label>
+                            <input type="text" id="ketqua_backward" placeholder="Ví dụ: S">
+                            <small>Nhập kết luận cần chứng minh bằng suy diễn lùi</small>
+                        </div>
+                        
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="suydienLui()">🚀 Thực hiện suy diễn lùi</button>
+                            <button class="btn btn-secondary" onclick="resetBackwardInference()">🔄 Đặt lại</button>
+                        </div>
+
+                        <div class="info-box" style="margin-top: 20px;">
+                            <strong>💡 Mô tơ MTSD:</strong> Chiến lược THEN → IF (từ kết luận tìm ngược về tiền đề)
+                        </div>
+                    </div>
+                    
+                    <div class="inference-results">
+                        <h3>Kết quả suy diễn lùi</h3>
+                        <div id="ketQuaSuyDienLui">
+                            Nhập giả thiết và kết luận cần chứng minh, sau đó nhấn "Thực hiện suy diễn lùi"...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trace Visualization -->
+                <div id="backward-trace-section" style="display: none; margin-top: 30px;">
+                    <h2>🔍 Chuỗi Suy Diễn Lùi (Backward Trace)</h2>
+                    <div id="traceContainer" class="trace-container">
+                        <!-- Trace will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Process Table -->
+                <div id="bang-qua-trinh-backward">
+                    <h2>📋 Bảng Quá Trình Suy Diễn Lùi</h2>
+                    <table id="process-table-backward">
+                        <thead>
+                            <tr>
+                                <th>Bước</th>
+                                <th>Luật</th>
+                                <th>Mục tiêu</th>
+                                <th>GT</th>
+                                <th>VET</th>
+                                <th>Giải thích & Công thức</th>
+                            </tr>
+                        </thead>
+                        <tbody id="process-table-body-backward"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

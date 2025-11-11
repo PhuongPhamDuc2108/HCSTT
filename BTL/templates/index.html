@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RASFF Logic Inference System - An Toàn Thực Phẩm & Chăn Nuôi</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="wrapper">
+        <!-- ==================== SIDEBAR ==================== -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>🔍 RASFF INFERENCE</h1>
+                <p>An Toàn Thực Phẩm & Chăn Nuôi</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-item active" data-tab="upload">
+                    <span>📤</span>
+                    <span>Tải File</span>
+                </div>
+                <div class="nav-item" data-tab="search">
+                    <span>🔎</span>
+                    <span>Tìm Luật</span>
+                </div>
+                <div class="nav-item" data-tab="inference">
+                    <span>🧠</span>
+                    <span>Suy Diễn</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <p>© 2025 RASFF System</p>
+            </div>
+        </div>
+
+        <!-- ==================== MAIN CONTENT ==================== -->
+        <div class="main-content">
+
+            <!-- ===== TAB 1: TẢI FILE ===== -->
+            <div class="tab-pane active" id="upload-tab">
+                <div class="tab-header">
+                    <h2>📤 Tải File Excel</h2>
+                </div>
+
+                <div class="tab-content">
+                    <div class="upload-container">
+                        <div class="upload-area" id="uploadArea">
+                            <i>📋</i>
+                            <h3>Kéo file Excel vào đây</h3>
+                            <p>hoặc</p>
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                            <button class="btn-upload" id="uploadBtn">
+                                <span>Chọn File</span>
+                            </button>
+                        </div>
+
+                        <div class="upload-status" id="uploadMessage"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB 2: TÌM LUẬT (CASCADING DROPDOWN - BỎ CỘT NOTE) ===== -->
+            <div class="tab-pane" id="search-tab">
+                <div class="tab-header">
+                    <h2>🔎 Tìm Luật (Cascading Filter)</h2>
+                </div>
+
+                <div class="tab-content">
+                    <!-- Cascading Filters Container -->
+                    <div class="cascading-filters" id="cascadingFilters">
+                        <div class="placeholder">
+                            ⬆️ Vui lòng tải file Excel trước để bắt đầu
+                        </div>
+                    </div>
+
+                    <!-- Nút Tìm Kiếm -->
+                    <div style="margin-top: 20px; display: flex; gap: 10px;">
+                        <button class="btn btn-primary" id="searchBtn">
+                            <span>🔍 Tìm Luật</span>
+                        </button>
+                        <button class="btn btn-secondary" id="clearSearchBtn">
+                            <span>🔄 Xóa Bộ Lọc</span>
+                        </button>
+                    </div>
+
+                    <!-- Kết Quả Tìm Kiếm -->
+                    <div id="searchResults" style="margin-top: 20px;">
+                        <!-- Sẽ hiển thị kết quả ở đây -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB 3: SUY DIỄN (HIỂN THỊ NOTE CHI TIẾT) ===== -->
+            <div class="tab-pane" id="inference-tab">
+                <div class="tab-header">
+                    <h2>🧠 Suy Diễn Logic</h2>
+                </div>
+
+                <div class="tab-content">
+                    <!-- Phương Pháp Suy Diễn -->
+                    <div class="method-section">
+                        <h3>🎯 Phương Pháp Suy Diễn</h3>
+                        <div class="method-buttons">
+                            <div class="method-btn active" data-method="forward">
+                                <span>➡️</span>
+                                <span>Suy Diễn Tiến</span>
+                                <small>(Forward Chaining)</small>
+                            </div>
+                            <div class="method-btn" data-method="backward">
+                                <span>⬅️</span>
+                                <span>Suy Diễn Lùi</span>
+                                <small>(Backward Chaining)</small>
+                            </div>
+                        </div>
+                        <input type="hidden" id="inferenceMethod" value="forward">
+                    </div>
+
+                    <!-- Input Facts (từ Tìm Luật) -->
+                    <div class="input-section">
+                        <h3>📍 Facts (Sự Kiện)</h3>
+                        <label>Các điều kiện đã chọn từ tab Tìm Luật:</label>
+                        <div class="facts-box" id="factsBox">
+                            <span class="placeholder">Chưa có facts. Vui lòng chọn từ tab "Tìm Luật"</span>
+                        </div>
+                        <textarea id="factsInput" class="form-control" rows="2" placeholder="Hoặc nhập thủ công (VD: TYPE=food, PRODUCT=black pepper)" disabled></textarea>
+                    </div>
+
+                    <!-- Input Goals -->
+                    <div class="input-section">
+                        <h3>🎯 Goals (Mục Tiêu Suy Diễn)</h3>
+                        <div class="form-group">
+                            <label>Nhập mục tiêu cần suy diễn:</label>
+                            <textarea id="goalsInput" class="form-control" rows="3" placeholder="Ví dụ: RISK_DECISION=serious, SEVERITY=high" required></textarea>
+                            <small>💡 Nhập 1 hoặc nhiều goal, cách nhau bởi dấu phẩy (,)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>📋 Tips:</label>
+                            <ul class="tips">
+                                <li>Suy Diễn Tiến: Bắt đầu từ Facts → Tìm Goals</li>
+                                <li>Suy Diễn Lùi: Bắt đầu từ Goals → Tìm Facts</li>
+                                <li>Sử dụng định dạng: KEY=value</li>
+                            </ul>
+                        </div>
+
+                        <button class="btn btn-success" id="inferenceBtn">
+                            <span>🚀 Chạy Suy Diễn</span>
+                        </button>
+                    </div>
+
+                    <!-- Kết Quả Suy Diễn -->
+                    <div id="inferenceResults" style="margin-top: 20px;">
+                        <!-- Sẽ hiển thị kết quả ở đây -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ==================== JAVASCRIPT ==================== -->
+    <script>
+        const BASE_URL = 'http://localhost:5000';
+        let selectedCascadingValues = {};
+        let currentFacts = [];
+        let cascadingFields = [];
+        let allAvailableValues = {};
+
+        // ============ TAB NAVIGATION ============
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+                
+                item.classList.add('active');
+                const tabName = item.getAttribute('data-tab');
+                document.getElementById(tabName + '-tab').classList.add('active');
+            });
+        });
+
+        // ============ METHOD SELECTION ============
+        document.querySelectorAll('.method-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('inferenceMethod').value = btn.getAttribute('data-method');
+            });
+        });
+
+        // ============ FILE UPLOAD ============
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadMessage = document.getElementById('uploadMessage');
+
+        uploadBtn.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#d5e8f7';
+            uploadArea.style.borderColor = '#2196F3';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.backgroundColor = '';
+            uploadArea.style.borderColor = '';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '';
+            uploadArea.style.borderColor = '';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                uploadFile();
+            }
+        });
+
+        fileInput.addEventListener('change', uploadFile);
+
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            uploadMessage.innerHTML = '<div class="status loading">⏳ Đang tải file...</div>';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${BASE_URL}/upload_rasff`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                console.log('Upload response:', data);
+
+                if (data.success) {
+                    uploadMessage.innerHTML = `
+                        <div class="status success">
+                            ✅ ${data.message}
+                            <br><small>Tìm thấy ${data.rules_count} luật | ${data.keys_count} trường</small>
+                        </div>
+                    `;
+                    
+                    await loadAllCascadingFilters();
+                } else {
+                    uploadMessage.innerHTML = `<div class="status error">❌ ${data.message}</div>`;
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                uploadMessage.innerHTML = `<div class="status error">❌ Lỗi: ${error.message}</div>`;
+            }
+        }
+
+        // ============ CASCADING FILTERS - HIỂN THỊ TẤT CẢ ============
+        async function loadAllCascadingFilters() {
+            try {
+                console.log('Loading all cascading filters...');
+                const response = await fetch(`${BASE_URL}/get_keys_rasff`);
+                const data = await response.json();
+                console.log('Get keys response:', data);
+
+                if (data.success && data.cascadingFields) {
+                    cascadingFields = data.cascadingFields;
+                    allAvailableValues = data.values_by_key;
+                    
+                    const container = document.getElementById('cascadingFilters');
+                    container.innerHTML = '';
+                    selectedCascadingValues = {};
+
+                    // ✅ TẠO TẤT CẢ DROPDOWN CÙNG LÚC
+                    cascadingFields.forEach((field, index) => {
+                        const values = allAvailableValues[field] || [];
+                        const fieldDiv = createFieldDropdown(field, values, index);
+                        container.appendChild(fieldDiv);
+                    });
+
+                    console.log('✅ All dropdowns created');
+                } else {
+                    console.error('Failed to load filters:', data);
+                    document.getElementById('cascadingFilters').innerHTML = 
+                        '<div class="placeholder">❌ Không tải được bộ lọc</div>';
+                }
+            } catch (error) {
+                console.error('Error loading filters:', error);
+                document.getElementById('cascadingFilters').innerHTML = 
+                    '<div class="placeholder">❌ Lỗi tải bộ lọc</div>';
+            }
+        }
+
+        function createFieldDropdown(fieldName, values, fieldIndex) {
+            const div = document.createElement('div');
+            div.className = 'cascading-field';
+            div.innerHTML = `
+                <label>${fieldName}</label>
+                <select id="select_${fieldName}" class="cascading-select" data-field="${fieldName}">
+                    <option value="">-- Chọn ${fieldName} --</option>
+                    ${values.map(v => `<option value="${v}">${v}</option>`).join('')}
+                </select>
+            `;
+
+            const select = div.querySelector(`#select_${fieldName}`);
+            select.addEventListener('change', async (e) => {
+                await handleFieldChange(fieldName, e.target.value);
+            });
+
+            return div;
+        }
+
+        async function handleFieldChange(fieldName, selectedValue) {
+            console.log(`Field changed: ${fieldName} = ${selectedValue}`);
+
+            // Cập nhật selectedCascadingValues
+            if (selectedValue) {
+                selectedCascadingValues[fieldName] = selectedValue;
+            } else {
+                delete selectedCascadingValues[fieldName];
+            }
+
+            console.log('Current selected values:', selectedCascadingValues);
+
+            // ✅ GỌI API ĐỂ LẤY AVAILABLE VALUES CHO TẤT CẢ FIELDS
+            try {
+                const response = await fetch(`${BASE_URL}/get_all_filtered_values`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ selectedValues: selectedCascadingValues })
+                });
+
+                const data = await response.json();
+                console.log('Filtered values response:', data);
+
+                if (data.success && data.availableValuesByField) {
+                    // ✅ CẬP NHẬT TẤT CẢ DROPDOWN VỚI AVAILABLE VALUES
+                    updateAllDropdowns(data.availableValuesByField);
+                }
+            } catch (error) {
+                console.error('Error fetching filtered values:', error);
+            }
+        }
+
+        function updateAllDropdowns(availableValuesByField) {
+            console.log('Updating all dropdowns with filtered values...');
+
+            cascadingFields.forEach(field => {
+                const select = document.getElementById(`select_${field}`);
+                if (!select) return;
+
+                const availableValues = availableValuesByField[field] || [];
+                const currentValue = selectedCascadingValues[field] || '';
+
+                console.log(`Updating ${field}: ${availableValues.length} values available`);
+
+                // Xóa options cũ (trừ option đầu tiên)
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+
+                // Thêm options mới
+                availableValues.forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    if (value === currentValue) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+
+                // Disable nếu không có options
+                select.disabled = availableValues.length === 0;
+            });
+        }
+
+        // ============ SEARCH REGULATIONS (BỎ CỘT NOTE) ============
+        document.getElementById('searchBtn').addEventListener('click', async () => {
+            const facts = Object.entries(selectedCascadingValues).map(([k, v]) => `${k}=${v}`);
+            console.log('Search button clicked, facts:', facts);
+
+            if (facts.length === 0) {
+                document.getElementById('searchResults').innerHTML = 
+                    '<div class="status error">❌ Vui lòng chọn ít nhất một giá trị</div>';
+                return;
+            }
+
+            currentFacts = facts;
+
+            try {
+                const response = await fetch(`${BASE_URL}/search_rasff`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ facts })
+                });
+
+                const data = await response.json();
+                console.log('Search response:', data);
+                const resultsDiv = document.getElementById('searchResults');
+
+                if (data.success && data.count > 0) {
+                    let rulesHtml = `
+                        <div class="results-box">
+                            <h3>✅ Tìm thấy ${data.count} luật:</h3>
+                            <table class="rules-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Điều Kiện (IF)</th>
+                                        <th>Kết Luận (THEN)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    data.rules.forEach(rule => {
+                        rulesHtml += `
+                            <tr>
+                                <td><strong>${rule.id}</strong></td>
+                                <td style="font-size: 12px; color: #666;">${rule.veTrai}</td>
+                                <td><strong style="color: #27ae60;">${rule.vePhai}</strong></td>
+                            </tr>
+                        `;
+                    });
+
+                    rulesHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+
+                    resultsDiv.innerHTML = rulesHtml;
+
+                    document.getElementById('factsInput').value = facts.join(', ');
+                    updateFactsDisplay(facts);
+                } else {
+                    resultsDiv.innerHTML = `<div class="status error">⚠️ Không tìm thấy luật nào phù hợp</div>`;
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                document.getElementById('searchResults').innerHTML = 
+                    `<div class="status error">❌ Lỗi: ${error.message}</div>`;
+            }
+        });
+
+        // Nút Xóa Bộ Lọc
+        document.getElementById('clearSearchBtn').addEventListener('click', () => {
+            console.log('Clear filters clicked');
+            selectedCascadingValues = {};
+            currentFacts = [];
+            document.getElementById('searchResults').innerHTML = '';
+            document.getElementById('factsInput').value = '';
+            document.getElementById('factsBox').innerHTML = 
+                '<span class="placeholder">Chưa có facts. Vui lòng chọn từ tab "Tìm Luật"</span>';
+            
+            loadAllCascadingFilters();
+        });
+
+        // ============ UPDATE FACTS DISPLAY ============
+        function updateFactsDisplay(facts) {
+            const factsBox = document.getElementById('factsBox');
+            if (facts.length > 0) {
+                factsBox.innerHTML = facts.map(fact => 
+                    `<span class="fact-tag">${fact}</span>`
+                ).join('');
+            } else {
+                factsBox.innerHTML = '<span class="placeholder">Chưa có facts</span>';
+            }
+        }
+
+        // ============ INFERENCE (HIỂN THỊ NOTE CHI TIẾT) ============
+        document.getElementById('inferenceBtn').addEventListener('click', async () => {
+            const method = document.getElementById('inferenceMethod').value;
+            const goalsStr = document.getElementById('goalsInput').value.trim();
+
+            console.log(`Inference clicked: method=${method}, goals=${goalsStr}`);
+
+            if (!goalsStr) {
+                document.getElementById('inferenceResults').innerHTML = 
+                    '<div class="status error">❌ Vui lòng nhập Goal</div>';
+                return;
+            }
+
+            const goals = goalsStr.split(',').map(g => g.trim());
+            const initialFacts = currentFacts;
+
+            const endpoint = method === 'forward' ? 
+                `${BASE_URL}/forward_inference_rasff` : 
+                `${BASE_URL}/backward_inference_rasff`;
+
+            try {
+                document.getElementById('inferenceResults').innerHTML = 
+                    '<div class="status loading">⏳ Đang suy diễn...</div>';
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ goals, initial_facts: initialFacts })
+                });
+
+                const data = await response.json();
+                console.log('Inference response:', data);
+                const resultsDiv = document.getElementById('inferenceResults');
+
+                if (data.success) {
+                    let resultsHtml = `
+                        <div class="results-section">
+                            <div class="inference-status status success">
+                                ✅ Suy diễn ${method === 'forward' ? 'Tiến' : 'Lùi'} thành công
+                                <br><small>${data.status}</small>
+                            </div>
+
+                            <div class="results-box">
+                                <h3>📋 Các Bước Suy Diễn:</h3>
+                    `;
+
+                    if (data.explanation && data.explanation.length > 0) {
+                        data.explanation.forEach((step, idx) => {
+                            let stepHtml = `
+                                <div class="step-box">
+                                    <div class="step-header">
+                                        Bước ${idx + 1}: ${step.type || 'Chi tiết'}
+                                        ${step.rule_id ? ` - Luật #${step.rule_id}` : ''}
+                                    </div>
+                                    <div class="step-body">
+                            `;
+
+                            // Hiển thị description
+                            if (step.description) {
+                                stepHtml += `<p>${step.description}</p>`;
+                            }
+
+                            // Hiển thị premises và conclusion (forward)
+                            if (step.premises) {
+                                stepHtml += `
+                                    <div style="margin: 10px 0;">
+                                        <strong>Điều kiện (IF):</strong>
+                                        <div style="margin-left: 15px; color: #666; font-size: 12px;">
+                                            ${step.premises.join(', ')}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                            if (step.conclusion) {
+                                stepHtml += `
+                                    <div style="margin: 10px 0;">
+                                        <strong>Kết luận (THEN):</strong>
+                                        <div style="margin-left: 15px; color: #27ae60; font-weight: 600;">
+                                            ${step.conclusion}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                            // ✅ HIỂN THỊ NOTE CHI TIẾT
+                            if (step.note && step.note !== 'N/A') {
+                                stepHtml += `
+                                    <div class="note-box">
+                                        <div class="note-header">📝 Diễn Giải Chi Tiết:</div>
+                                        <div class="note-content">${step.note.replace(/\n/g, '<br>')}</div>
+                                    </div>
+                                `;
+                            }
+
+                            // Hiển thị Ve_Trai và Ve_Phai (backward)
+                            if (step.ve_trai) {
+                                stepHtml += `
+                                    <div style="margin: 10px 0;">
+                                        <strong>Điều kiện (IF):</strong>
+                                        <div style="margin-left: 15px; color: #666; font-size: 12px;">
+                                            ${step.ve_trai}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                            if (step.ve_phai) {
+                                stepHtml += `
+                                    <div style="margin: 10px 0;">
+                                        <strong>Kết luận (THEN):</strong>
+                                        <div style="margin-left: 15px; color: #27ae60; font-weight: 600;">
+                                            ${step.ve_phai}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                            // Hiển thị reason
+                            if (step.reason) {
+                                stepHtml += `<p style="color: #e67e22; margin-top: 10px;"><em>${step.reason}</em></p>`;
+                            }
+
+                            stepHtml += `
+                                    </div>
+                                </div>
+                            `;
+
+                            resultsHtml += stepHtml;
+                        });
+                    } else {
+                        resultsHtml += '<p class="placeholder">Không có bước suy diễn</p>';
+                    }
+
+                    if (data.working_memory && data.working_memory.length > 0) {
+                        resultsHtml += `
+                            <h3 style="margin-top: 20px;">💾 Working Memory (Tất Cả Facts):</h3>
+                            <div class="facts-box">
+                                ${data.working_memory.map(fact => 
+                                    `<span class="fact-tag">${fact}</span>`
+                                ).join('')}
+                            </div>
+                        `;
+                    }
+
+                    resultsHtml += '</div></div>';
+                    resultsDiv.innerHTML = resultsHtml;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="status error">
+                            ❌ Suy diễn không thành công
+                            <br><small>${data.status}</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Inference error:', error);
+                document.getElementById('inferenceResults').innerHTML = 
+                    `<div class="status error">❌ Lỗi: ${error.message}</div>`;
+            }
+        });
+
+        window.addEventListener('load', () => {
+            console.log('Page loaded, BASE_URL:', BASE_URL);
+        });
+    </script>
+</body>
+</html>
