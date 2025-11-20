@@ -44,24 +44,19 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .result-card-header { padding: 15px 25px; color: white; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
 .risk-badge { background: rgba(0,0,0,0.2); padding: 5px 15px; border-radius: 20px; font-size: 14px; }
 
-/* GRADIENT BACKGROUNDS FOR RISK */
-.risk-high .result-card-header { background: linear-gradient(135deg, #ff7675, #d63031); } /* Đỏ */
-.risk-medium .result-card-header { background: linear-gradient(135deg, #fdcb6e, #e17055); } /* Cam */
-.risk-low .result-card-header { background: linear-gradient(135deg, #55efc4, #00b894); } /* Xanh */
+.risk-high .result-card-header { background: linear-gradient(135deg, #ff7675, #d63031); } 
+.risk-medium .result-card-header { background: linear-gradient(135deg, #fdcb6e, #e17055); } 
+.risk-low .result-card-header { background: linear-gradient(135deg, #55efc4, #00b894); } 
 .risk-unknown .result-card-header { background: #636e72; }
 
 .result-body { padding: 25px; }
-
-/* KẾT LUẬN */
 .conclusion-box { background: #f1f2f6; border-left: 5px solid #2d3436; padding: 15px; border-radius: 4px; margin-bottom: 15px; }
 .conclusion-box .value { font-size: 18px; color: #2d3436; font-weight: 700; margin-top: 5px; }
 
-/* DISTRIBUTION STAT */
 .dist-box { background: #e3f2fd; border-left: 5px solid #2196f3; padding: 15px; border-radius: 4px; margin-bottom: 15px; }
 .dist-box .label { color: #1976d2; font-size: 11px; font-weight: bold; letter-spacing: 1px; }
 .dist-box .value { color: #0d47a1; font-weight: bold; font-size: 15px; margin-top: 5px; }
 
-/* NOTE */
 .note-box { background: #fff3cd; border-left: 5px solid #ffc107; padding: 15px; border-radius: 4px; }
 .note-box .label { color: #856404; font-size: 11px; font-weight: bold; }
 .note-box .value { color: #533f03; font-size: 14px; margin-top: 5px; line-height: 1.5; }
@@ -71,3 +66,16 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .status { text-align: center; padding: 20px; font-weight: bold; border-radius: 8px; margin-top: 15px; }
 .status.loading { background: #e1f5fe; color: #0288d1; }
 .status.error { background: #ffebee; color: #d32f2f; }
+
+/* DASHBOARD STYLES */
+.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.full-width { grid-column: 1 / -1; }
+.dash-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.dash-card h3 { font-size: 16px; color: #636e72; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; text-transform: uppercase; }
+.chart-container { position: relative; height: 250px; width: 100%; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.data-table th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; color: #636e72; }
+.data-table td { padding: 10px; border-bottom: 1px solid #f4f6f8; }
+.rank-badge { display: inline-block; width: 20px; height: 20px; background: #0984e3; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 12px; margin-right: 8px; }
+.table-responsive { overflow-x: auto; }

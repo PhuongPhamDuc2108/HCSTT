@@ -2,30 +2,47 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import pandas as pd
 import os
+from collections import Counter
 from inference import forward_inference_detailed_rasff
 
 app = Flask(__name__)
 CORS(app)
 
-# === CẤU HÌNH QUAN TRỌNG ===
+# === CẤU HÌNH ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# [SỬA TÊN FILE Ở ĐÂY] - Cập nhật đúng tên file bạn vừa gửi
-EXCEL_FILE = 'RASFF_Rules_Inference_500_DETAILED_RISKANALYSIS.xlsx'
+EXCEL_FILE = 'RASFF_Rules_Inference_500_SCIENTIFIC_vi.xlsx'
 FILE_PATH = os.path.join(BASE_DIR, EXCEL_FILE)
 
-# Thứ tự bộ lọc (Không bao gồm DISTRIBUTION_STAT)
 CASCADING_FIELDS = ['NOT_COUNTRY', 'TYPE', 'PROD_CAT', 'PRODUCT', 'HAZARDS_CAT', 'HAZARDS']
 
 global_rules = []
 global_initial_values = {}
 
+# === TỪ ĐIỂN CHUẨN HÓA (VIETNAMESE -> ENGLISH) ===
+VN_TO_EN_COUNTRY_MAP = {
+    'Việt Nam': 'Vietnam', 'Trung Quốc': 'China', 'Ấn Độ': 'India', 'Thái Lan': 'Thailand',
+    'Thổ Nhĩ Kỳ': 'Turkey', 'Hàn Quốc': 'South Korea', 'Nhật Bản': 'Japan', 'Indonesia': 'Indonesia',
+    'Đài Loan': 'Taiwan', 'Iran': 'Iran', 'Pakistan': 'Pakistan', 'Sri Lanka': 'Sri Lanka',
+    'Malaysia': 'Malaysia', 'Philippines': 'Philippines', 'Singapore': 'Singapore',
+    'Campuchia': 'Cambodia', 'Lào': 'Laos', 'Hồng Kông': 'Hong Kong', 'Israel': 'Israel',
+    'Ả Rập Xê Út': 'Saudi Arabia', 'Các Tiểu vương quốc Ả Rập Thống nhất': 'United Arab Emirates',
+    'Ba Lan': 'Poland', 'Pháp': 'France', 'Ý': 'Italy', 'Đức': 'Germany', 'Tây Ban Nha': 'Spain',
+    'Hà Lan': 'Netherlands', 'Bỉ': 'Belgium', 'Vương Quốc Anh': 'United Kingdom', 'Anh': 'United Kingdom',
+    'Thụy Điển': 'Sweden', 'Đan Mạch': 'Denmark', 'Na Uy': 'Norway', 'Ukraina': 'Ukraine',
+    'Nga': 'Russia', 'Bulgaria': 'Bulgaria', 'Hungary': 'Hungary', 'Séc': 'Czech Republic',
+    'Hy Lạp': 'Greece', 'Bồ Đào Nha': 'Portugal', 'Ireland': 'Ireland',
+    'Mỹ': 'United States', 'Hoa Kỳ': 'United States', 'Brazil': 'Brazil', 'Argentina': 'Argentina',
+    'Canada': 'Canada', 'Mexico': 'Mexico', 'Chile': 'Chile', 'Ecuador': 'Ecuador',
+    'Colombia': 'Colombia', 'Peru': 'Peru',
+    'Ai Cập': 'Egypt', 'Maroc': 'Morocco', 'Nigeria': 'Nigeria', 'Nam Phi': 'South Africa',
+    'Madagascar': 'Madagascar',
+    'Úc': 'Australia', 'New Zealand': 'New Zealand'
+}
+
 def parse_ve_trai(ve_trai_str):
-    """Tách chuỗi VE_TRAI thành Dict."""
     data = {}
     if not isinstance(ve_trai_str, str) or not ve_trai_str:
         return data
-        
     parts = ve_trai_str.split(',')
     for part in parts:
         if '=' in part:
@@ -38,61 +55,41 @@ def parse_ve_trai(ve_trai_str):
 
 def load_data_startup():
     global global_rules, global_initial_values
-    print(f"\n⏳ [STARTUP] Đang đọc file: {EXCEL_FILE}...")
+    print(f"\n⏳ [STARTUP] Đang đọc file dữ liệu...")
     
-    if not os.path.exists(FILE_PATH):
-        print(f"❌ LỖI: Không tìm thấy file '{EXCEL_FILE}'. Hãy chắc chắn file Excel nằm cùng thư mục với app.py")
-        # Thử tìm file csv nếu không thấy xlsx (phòng trường hợp bạn dùng csv)
-        if os.path.exists(FILE_PATH.replace('.xlsx', '.csv')):
-            print("⚠️ Tìm thấy file CSV, hãy đổi tên config hoặc convert sang Excel.")
-        return
+    actual_path = FILE_PATH
+    if not os.path.exists(actual_path):
+        csv_path = actual_path.replace('.xlsx', '.csv')
+        extra_csv_path = actual_path + " - All_Rules.csv"
+        if os.path.exists(csv_path): actual_path = csv_path
+        elif os.path.exists(extra_csv_path): actual_path = extra_csv_path
+        else:
+             print(f"❌ LỖI: Không tìm thấy file dữ liệu {EXCEL_FILE}.")
+             return
 
     try:
-        # 1. Đọc file Excel
-        df = pd.read_excel(FILE_PATH, engine='openpyxl')
+        if actual_path.endswith('.csv'):
+            df = pd.read_csv(actual_path)
+        else:
+            df = pd.read_excel(actual_path, engine='openpyxl')
         
-        # --- XỬ LÝ TÊN CỘT ---
-        # Chuẩn hóa hết về chữ in hoa để tránh lỗi (Risk_Percentage -> RISK_PERCENTAGE)
         df.columns = [str(c).strip().upper() for c in df.columns]
         df = df.fillna('')
         
-        print(f"✅ Các cột tìm thấy trong file: {df.columns.tolist()}")
-        
-        # Kiểm tra xem cột RISK có tồn tại không
-        if 'RISK_PERCENTAGE' not in df.columns:
-            print("⚠️ CẢNH BÁO: Không tìm thấy cột 'RISK_PERCENTAGE'. Kiểm tra lại file Excel!")
-
         unique_values = {k: set() for k in CASCADING_FIELDS}
         count = 0
 
-        # 2. Duyệt từng dòng
         for idx, row in df.iterrows():
             ve_phai = str(row.get('VE_PHAI') or row.get('THEN') or '').strip()
-            note = str(row.get('NOTE') or 'N/A').strip()
-            
-            # --- [SỬA LỖI] ĐỌC CỘT RISK ---
-            # Thử đọc các biến thể tên cột có thể xảy ra
-            risk_val = str(row.get('RISK_PERCENTAGE') or row.get('RISK PERCENTAGE') or row.get('RISK') or '0%').strip()
-
             if not ve_phai: continue
 
-            # --- Xử lý VE_TRAI ---
             raw_ve_trai = str(row.get('VE_TRAI', '')).strip()
             combined_data = parse_ve_trai(raw_ve_trai)
-
-            # --- Tách DISTRIBUTION_STAT (Key trong Vế Trái) ---
             dist_stat = combined_data.pop('DISTRIBUTION_STAT', 'Chưa có thông tin phân phối')
 
-            # --- Ghi đè dữ liệu cột phụ ---
-            product_col = str(row.get('PRODUCT', '')).strip()
-            if product_col and product_col.lower() != 'nan':
-                combined_data['PRODUCT'] = product_col
-
-            country_col = str(row.get('NOT_COUNTRY', '')).strip()
-            if country_col and country_col.lower() != 'nan':
-                combined_data['NOT_COUNTRY'] = country_col
+            if str(row.get('PRODUCT', '')).strip(): combined_data['PRODUCT'] = str(row.get('PRODUCT')).strip()
+            if str(row.get('NOT_COUNTRY', '')).strip(): combined_data['NOT_COUNTRY'] = str(row.get('NOT_COUNTRY')).strip()
             
-            # --- Tạo Filter Data ---
             filter_data = {}
             conditions_display = []
             has_valid_data = False
@@ -110,25 +107,26 @@ def load_data_startup():
                     'id': row.get('ID', idx + 1),
                     'veTrai': ", ".join(conditions_display),
                     'vePhai': ve_phai,
-                    'Note': note,
-                    'risk': risk_val,          # Giá trị đọc từ cột RISK_PERCENTAGE
-                    'distribution': dist_stat, # Giá trị tách từ key DISTRIBUTION_STAT
+                    'Note': str(row.get('NOTE') or 'N/A').strip(),
+                    'risk': str(row.get('RISK_PERCENTAGE') or row.get('RISK') or '0%').strip(),
+                    'distribution': dist_stat,
                     'filter_data': filter_data
                 })
                 count += 1
 
         global_initial_values = {k: sorted(list(v)) for k, v in unique_values.items()}
-        
         print(f"✅ LOAD THÀNH CÔNG: {count} luật.")
-        if count > 0:
-            print(f"   🔍 Kiểm tra dòng 1: Risk='{global_rules[0]['risk']}', Dist='{global_rules[0]['distribution']}'")
 
     except Exception as e:
-        print(f"❌ LỖI NGHIÊM TRỌNG KHI ĐỌC FILE: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ LỖI ĐỌC FILE: {e}")
 
 load_data_startup()
+
+def chuan_hoa_quoc_gia(name):
+    if not name: return None
+    name = str(name).strip()
+    if name in VN_TO_EN_COUNTRY_MAP: return VN_TO_EN_COUNTRY_MAP[name]
+    return VN_TO_EN_COUNTRY_MAP.get(name.title(), name)
 
 @app.route('/')
 def index():
@@ -151,7 +149,6 @@ def get_all_filtered_values():
                 if rule['filter_data'].get(key) != val:
                     is_match = False
                     break
-            
             if is_match:
                 for field in CASCADING_FIELDS:
                     val = rule['filter_data'].get(field)
@@ -172,6 +169,52 @@ def forward_inference_rasff():
     except Exception as e:
         return jsonify({'success': False, 'status': str(e)})
 
+@app.route('/get_dashboard_statistics', methods=['GET'])
+def get_dashboard_statistics():
+    try:
+        countries = []
+        hazards = []
+        prod_cats = []
+        products = []
+        
+        for rule in global_rules:
+            fd = rule.get('filter_data', {})
+            raw_country = fd.get('NOT_COUNTRY')
+            if raw_country:
+                english_name = chuan_hoa_quoc_gia(raw_country)
+                if english_name: countries.append(english_name)
+                
+            if fd.get('HAZARDS_CAT'): hazards.append(fd.get('HAZARDS_CAT'))
+            if fd.get('PROD_CAT'): prod_cats.append(fd.get('PROD_CAT'))
+            if fd.get('PRODUCT'): products.append(fd.get('PRODUCT'))
+            
+        # --- [CHỈNH SỬA CHÍNH] Sắp xếp giảm dần ---
+        # Counter.most_common(10) trả về list các tuple đã sắp xếp: [('Item1', 10), ('Item2', 8)...]
+        # Ta tách ra 2 list riêng để Frontend vẽ đúng thứ tự
+        
+        hazard_sorted = Counter(hazards).most_common(10)
+        prod_cat_sorted = Counter(prod_cats).most_common(10)
+        product_sorted = Counter(products).most_common(10)
+
+        return jsonify({
+            'success': True,
+            'total_rules': len(global_rules),
+            'stats': {
+                'country_counts': dict(Counter(countries).most_common()), # Map không cần thứ tự
+                
+                'hazard_stats': {
+                    'labels': [x[0] for x in hazard_sorted],
+                    'values': [x[1] for x in hazard_sorted]
+                },
+                'prod_cat_stats': {
+                    'labels': [x[0] for x in prod_cat_sorted],
+                    'values': [x[1] for x in prod_cat_sorted]
+                },
+                'top_products_list': [{'name': x[0], 'count': x[1]} for x in product_sorted]
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
 if __name__ == '__main__':
-    print("🚀 Server đang chạy tại http://127.0.0.1:5000")
     app.run(host='127.0.0.1', port=5000, debug=True)
