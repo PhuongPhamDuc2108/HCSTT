@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import pandas as pd
 import os
+import re  # <--- [MỚI] Import thư viện regex
 from collections import Counter
 from inference import forward_inference_detailed_rasff
 
@@ -10,7 +11,7 @@ CORS(app)
 
 # === CẤU HÌNH ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXCEL_FILE = 'RASFF_Rules_Inference_500_SCIENTIFIC_vi.xlsx'
+EXCEL_FILE = 'RASFF_Final_Complete.xlsx'
 FILE_PATH = os.path.join(BASE_DIR, EXCEL_FILE)
 
 CASCADING_FIELDS = ['NOT_COUNTRY', 'TYPE', 'PROD_CAT', 'PRODUCT', 'HAZARDS_CAT', 'HAZARDS']
@@ -18,7 +19,6 @@ CASCADING_FIELDS = ['NOT_COUNTRY', 'TYPE', 'PROD_CAT', 'PRODUCT', 'HAZARDS_CAT',
 global_rules = []
 global_initial_values = {}
 
-# === TỪ ĐIỂN CHUẨN HÓA (VIETNAMESE -> ENGLISH) ===
 VN_TO_EN_COUNTRY_MAP = {
     'Việt Nam': 'Vietnam', 'Trung Quốc': 'China', 'Ấn Độ': 'India', 'Thái Lan': 'Thailand',
     'Thổ Nhĩ Kỳ': 'Turkey', 'Hàn Quốc': 'South Korea', 'Nhật Bản': 'Japan', 'Indonesia': 'Indonesia',
@@ -49,9 +49,44 @@ def parse_ve_trai(ve_trai_str):
             key, val = part.split('=', 1)
             key = key.strip().upper()
             val = val.strip()
-            if key and val:
+            if key and val:  
                 data[key] = val
     return data
+
+def find_action_column(columns):
+    if 'ACTION_TAKEN' in columns: return 'ACTION_TAKEN'
+    if 'ACTION' in columns: return 'ACTION'
+    for col in columns:
+        c_upper = str(col).upper()
+        if "ACTION" in c_upper or "TAKEN" in c_upper or "BIEN_PHAP" in c_upper or "XU_LY" in c_upper:
+            return col
+    return None
+
+# === [MỚI] HÀM TÍNH TOÁN RISK TỪ NOTE ===
+def calculate_risk_from_note(note_text):
+    """
+    Phân tích cột Note để tính chỉ số % rủi ro nếu cột RISK bị thiếu.
+    """
+    if not isinstance(note_text, str):
+        return 0 # Mặc định
+
+    # 1. Ưu tiên tìm mẫu "(x/5)" (Ví dụ: (3/5) -> 60%)
+    match = re.search(r'\((\d+)/5\)', note_text)
+    if match:
+        score = int(match.group(1))
+        # Quy đổi: (Điểm / 5) * 100
+        return int((score / 5) * 100)
+
+    # 2. Nếu không có số sao, tìm theo từ khóa ngữ nghĩa
+    text_lower = note_text.lower()
+    if 'serious' in text_lower or 'nghiêm trọng' in text_lower or 'cao' in text_lower:
+        return 85
+    elif 'decision not yet taken' in text_lower or 'chưa quyết định' in text_lower or 'undecided' in text_lower:
+        return 50
+    elif 'thấp' in text_lower or 'low' in text_lower:
+        return 20
+    
+    return 0 # Không xác định
 
 def load_data_startup():
     global global_rules, global_initial_values
@@ -69,13 +104,24 @@ def load_data_startup():
 
     try:
         if actual_path.endswith('.csv'):
-            df = pd.read_csv(actual_path)
+            try:
+                df = pd.read_csv(actual_path, encoding='utf-8-sig')
+            except:
+                df = pd.read_csv(actual_path, encoding='latin-1')
         else:
             df = pd.read_excel(actual_path, engine='openpyxl')
         
+        action_col_original = find_action_column(df.columns)
         df.columns = [str(c).strip().upper() for c in df.columns]
         df = df.fillna('')
         
+        action_col_upper = str(action_col_original).strip().upper() if action_col_original else None
+        
+        if action_col_upper:
+            print(f"✅ Đã map cột Action: '{action_col_original}'")
+        else:
+            print("⚠️ CẢNH BÁO: Không tìm thấy cột Action!")
+
         unique_values = {k: set() for k in CASCADING_FIELDS}
         count = 0
 
@@ -90,6 +136,28 @@ def load_data_startup():
             if str(row.get('PRODUCT', '')).strip(): combined_data['PRODUCT'] = str(row.get('PRODUCT')).strip()
             if str(row.get('NOT_COUNTRY', '')).strip(): combined_data['NOT_COUNTRY'] = str(row.get('NOT_COUNTRY')).strip()
             
+            action_val = 'Chưa có thông tin'
+            if action_col_upper:
+                raw_val = row.get(action_col_upper)
+                if pd.notna(raw_val) and str(raw_val).strip() != '' and str(raw_val).lower() != 'nan':
+                    action_val = str(raw_val).strip()
+            
+            # === [MỚI] XỬ LÝ RISK PERCENTAGE TỰ ĐỘNG ===
+            # Lấy giá trị từ cột có sẵn
+            raw_risk = row.get('RISK_PERCENTAGE') or row.get('RISK')
+            risk_val = '0%'
+            
+            # Nếu có cột dữ liệu thì dùng
+            if pd.notna(raw_risk) and str(raw_risk).strip() != '' and str(raw_risk).strip() != '0%':
+                risk_val = str(raw_risk).strip()
+            else:
+                # Nếu không có, tự tính từ cột NOTE
+                note_content = str(row.get('NOTE') or '').strip()
+                calculated_risk = calculate_risk_from_note(note_content)
+                if calculated_risk > 0:
+                    risk_val = f"{calculated_risk}%"
+            # =============================================
+
             filter_data = {}
             conditions_display = []
             has_valid_data = False
@@ -103,12 +171,16 @@ def load_data_startup():
                     has_valid_data = True
             
             if has_valid_data:
+                rule_id = str(row.get('ID', idx + 1)).strip()
+                if rule_id.endswith('.0'): rule_id = rule_id[:-2]
+
                 global_rules.append({
-                    'id': row.get('ID', idx + 1),
+                    'id': rule_id, 
                     'veTrai': ", ".join(conditions_display),
                     'vePhai': ve_phai,
                     'Note': str(row.get('NOTE') or 'N/A').strip(),
-                    'risk': str(row.get('RISK_PERCENTAGE') or row.get('RISK') or '0%').strip(),
+                    'risk': risk_val, # Sử dụng giá trị đã xử lý ở trên
+                    'action_taken': action_val,
                     'distribution': dist_stat,
                     'filter_data': filter_data
                 })
@@ -119,6 +191,8 @@ def load_data_startup():
 
     except Exception as e:
         print(f"❌ LỖI ĐỌC FILE: {e}")
+        import traceback
+        traceback.print_exc()
 
 load_data_startup()
 
@@ -164,9 +238,36 @@ def forward_inference_rasff():
     try:
         data = request.get_json()
         facts = data.get('initial_facts', [])
-        result = forward_inference_detailed_rasff(facts, global_rules)
-        return jsonify(result)
+        
+        # 1. Chạy suy diễn
+        response_data = forward_inference_detailed_rasff(facts, global_rules)
+        
+        # 2. TÌM LẠI ID CỦA LUẬT GỐC và ACTION
+        if 'results' in response_data:
+            for item in response_data['results']:
+                conclusion_text = item.get('conclusion')
+                
+                matched_rule = next((r for r in global_rules if r['vePhai'] == conclusion_text), None)
+                
+                if matched_rule:
+                    found_id = matched_rule['id']
+                    found_action = matched_rule['action_taken']
+                    
+                    # Gán lại ID và Action vào kết quả trả về cho FE
+                    item['id'] = found_id
+                    item['action_taken'] = found_action
+                    
+                    # Nếu trong kết quả suy diễn chưa có risk (hoặc risk=0%), lấy lại risk từ global_rules
+                    if 'risk' not in item or item['risk'] == '0%':
+                         item['risk'] = matched_rule['risk']
+                    
+                    print(f"✅ Khôi phục ID: {found_id} -> Action: {found_action} -> Risk: {item['risk']}")
+                else:
+                    item['action_taken'] = "Không tìm thấy thông tin (Lỗi khớp ID)"
+                    
+        return jsonify(response_data)
     except Exception as e:
+        print(f"Lỗi API Inference: {e}")
         return jsonify({'success': False, 'status': str(e)})
 
 @app.route('/get_dashboard_statistics', methods=['GET'])
@@ -188,10 +289,6 @@ def get_dashboard_statistics():
             if fd.get('PROD_CAT'): prod_cats.append(fd.get('PROD_CAT'))
             if fd.get('PRODUCT'): products.append(fd.get('PRODUCT'))
             
-        # --- [CHỈNH SỬA CHÍNH] Sắp xếp giảm dần ---
-        # Counter.most_common(10) trả về list các tuple đã sắp xếp: [('Item1', 10), ('Item2', 8)...]
-        # Ta tách ra 2 list riêng để Frontend vẽ đúng thứ tự
-        
         hazard_sorted = Counter(hazards).most_common(10)
         prod_cat_sorted = Counter(prod_cats).most_common(10)
         product_sorted = Counter(products).most_common(10)
@@ -200,16 +297,9 @@ def get_dashboard_statistics():
             'success': True,
             'total_rules': len(global_rules),
             'stats': {
-                'country_counts': dict(Counter(countries).most_common()), # Map không cần thứ tự
-                
-                'hazard_stats': {
-                    'labels': [x[0] for x in hazard_sorted],
-                    'values': [x[1] for x in hazard_sorted]
-                },
-                'prod_cat_stats': {
-                    'labels': [x[0] for x in prod_cat_sorted],
-                    'values': [x[1] for x in prod_cat_sorted]
-                },
+                'country_counts': dict(Counter(countries).most_common()),
+                'hazard_stats': {'labels': [x[0] for x in hazard_sorted], 'values': [x[1] for x in hazard_sorted]},
+                'prod_cat_stats': {'labels': [x[0] for x in prod_cat_sorted], 'values': [x[1] for x in prod_cat_sorted]},
                 'top_products_list': [{'name': x[0], 'count': x[1]} for x in product_sorted]
             }
         })

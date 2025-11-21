@@ -107,7 +107,6 @@
         const BASE_URL = 'http://127.0.0.1:5000';
         const ORDERED_FIELDS = ['NOT_COUNTRY', 'TYPE', 'PROD_CAT', 'PRODUCT', 'HAZARDS_CAT', 'HAZARDS'];
         let selectedValues = {};
-        // Biến giữ chart instance để destroy trước khi vẽ lại
         let prodChartInstance = null;
         let hazardChartInstance = null;
 
@@ -150,7 +149,6 @@
         async function handleSelection(field, value) {
             if (value) selectedValues[field] = value;
             else delete selectedValues[field];
-
             let startReset = false;
             ORDERED_FIELDS.forEach(f => {
                 if (startReset) {
@@ -160,7 +158,6 @@
                 }
                 if (f === field) startReset = true;
             });
-
             try {
                 const res = await fetch(`${BASE_URL}/get_all_filtered_values`, {
                     method: 'POST',
@@ -227,9 +224,11 @@
             const facts = factsInput || [];
             const resDiv = document.getElementById('inferenceResults');
             resDiv.innerHTML = '<div class="status loading"><i class="fas fa-circle-notch fa-spin"></i> Đang phân tích kịch bản...</div>';
+            
             if (!factsInput) {
                 ORDERED_FIELDS.forEach(f => { if (selectedValues[f]) facts.push(`${f}=${selectedValues[f]}`); });
             }
+            
             try {
                 const res = await fetch(`${BASE_URL}/forward_inference_rasff`, {
                     method: 'POST',
@@ -237,13 +236,18 @@
                     body: JSON.stringify({ initial_facts: facts })
                 });
                 const data = await res.json();
+                console.log("API Response:", data); // Check console
+
                 if (data.success && data.results.length > 0) {
                     let html = '';
                     data.results.forEach((item, idx) => {
                         const riskVal = item.risk || '0%';
                         const riskInfo = getRiskInfo(riskVal);
                         const distVal = item.distribution || 'N/A';
+                        // [FIX] Hiển thị action taken
+                        const actionVal = item.action_taken || 'Chưa có thông tin';
                         const note = item.note ? item.note.replace(/\n/g, '<br>') : 'Không có ghi chú.';
+                        
                         html += `
                             <div class="result-card ${riskInfo.class}">
                                 <div class="result-card-header">
@@ -255,10 +259,17 @@
                                         <div class="label">DỰ BÁO / HÀNH ĐỘNG:</div>
                                         <div class="value">${item.conclusion}</div>
                                     </div>
+                                    
+                                    <div class="action-box">
+                                        <div class="label"><i class="fas fa-clipboard-check"></i> BIỆN PHÁP ĐÃ XỬ LÝ (ACTION TAKEN):</div>
+                                        <div class="value">${actionVal}</div>
+                                    </div>
+
                                     <div class="dist-box">
-                                        <div class="label"><i class="fas fa-tasks"></i> TRẠNG THÁI XỬ LÝ PHÂN PHỐI:</div>
+                                        <div class="label"><i class="fas fa-tasks"></i> TRẠNG THÁI PHÂN PHỐI:</div>
                                         <div class="value">${distVal}</div>
                                     </div>
+
                                     <div class="note-box">
                                         <div class="label"><i class="fas fa-info-circle"></i> GHI CHÚ:</div>
                                         <div class="value">${note}</div>
@@ -287,104 +298,27 @@
             } catch (e) { console.error("Dashboard load error:", e); }
         }
 
+        // Các hàm render biểu đồ giữ nguyên như cũ...
         function renderMap(countryData) {
             const countries = Object.keys(countryData);
             const counts = Object.values(countryData);
-            
-            const data = [{
-                type: 'choropleth',
-                locationmode: 'country names',
-                locations: countries,
-                z: counts,
-                text: countries,
-                colorscale: [
-                    [0, 'rgb(255, 235, 238)'],
-                    [0.5, 'rgb(255, 100, 100)'],
-                    [1, 'rgb(180, 0, 0)']
-                ],
-                autocolorscale: false,
-                reversescale: false,
-                marker: { line: { color: 'rgb(255,255,255)', width: 1 } },
-                colorbar: { title: 'Số cảnh báo', thickness: 15 }
-            }];
-
-            const layout = {
-                title: false,
-                geo: {
-                    scope: 'world',
-                    showframe: false,
-                    showcoastlines: true,
-                    coastlinecolor: 'rgb(150,150,150)',
-                    showcountries: true,
-                    countrycolor: 'rgb(200,200,200)',
-                    countrywidth: 0.5,
-                    showland: true,
-                    landcolor: 'rgb(245, 245, 245)',
-                    showocean: true,
-                    oceancolor: 'rgb(225, 240, 255)',
-                    projection: { type: 'natural earth' }
-                },
-                margin: {l:0, r:0, b:0, t:0},
-                height: 550
-            };
+            const data = [{ type: 'choropleth', locationmode: 'country names', locations: countries, z: counts, text: countries, colorscale: 'Reds', autocolorscale: false, reversescale: false, marker: { line: { color: 'rgb(255,255,255)', width: 1 } }, colorbar: { title: 'Số cảnh báo', thickness: 15 } }];
+            const layout = { title: false, geo: { scope: 'world', showframe: false, showcoastlines: true, showcountries: true, countrycolor: 'rgb(200,200,200)', countrywidth: 0.5, showland: true, landcolor: 'rgb(245, 245, 245)', showocean: true, oceancolor: 'rgb(225, 240, 255)', projection: { type: 'natural earth' } }, margin: {l:0, r:0, b:0, t:0}, height: 550 };
             Plotly.newPlot('mapChart', data, layout, {responsive: true, displayModeBar: false});
         }
 
         function renderCharts(stats) {
-            // Xóa chart cũ nếu tồn tại để tránh vẽ đè
             if (prodChartInstance) prodChartInstance.destroy();
             if (hazardChartInstance) hazardChartInstance.destroy();
-
-            // Biểu đồ Doughnut (Sản phẩm)
-            prodChartInstance = new Chart(document.getElementById('prodCatChart'), {
-                type: 'doughnut',
-                data: {
-                    // Sử dụng trực tiếp mảng đã sắp xếp từ backend
-                    labels: stats.prod_cat_stats.labels,
-                    datasets: [{
-                        data: stats.prod_cat_stats.values,
-                        backgroundColor: ['#00cec9', '#0984e3', '#6c5ce7', '#fdcb6e', '#e17055', '#d63031', '#e84393', '#00b894', '#ffeaa7']
-                    }]
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right', labels: {boxWidth: 10, font:{size:10}} } } 
-                }
-            });
-
-            // Biểu đồ Bar (Mối nguy) - Horizontal
-            hazardChartInstance = new Chart(document.getElementById('hazardChart'), {
-                type: 'bar',
-                data: {
-                    // Sử dụng trực tiếp mảng đã sắp xếp từ backend
-                    labels: stats.hazard_stats.labels,
-                    datasets: [{
-                        label: 'Số cảnh báo',
-                        data: stats.hazard_stats.values,
-                        backgroundColor: '#ff7675'
-                    }]
-                },
-                options: { 
-                    indexAxis: 'y', 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { x: { beginAtZero: true } }
-                }
-            });
+            prodChartInstance = new Chart(document.getElementById('prodCatChart'), { type: 'doughnut', data: { labels: stats.prod_cat_stats.labels, datasets: [{ data: stats.prod_cat_stats.values, backgroundColor: ['#00cec9', '#0984e3', '#6c5ce7', '#fdcb6e', '#e17055', '#d63031', '#e84393', '#00b894', '#ffeaa7'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: {boxWidth: 10, font:{size:10}} } } } });
+            hazardChartInstance = new Chart(document.getElementById('hazardChart'), { type: 'bar', data: { labels: stats.hazard_stats.labels, datasets: [{ label: 'Số cảnh báo', data: stats.hazard_stats.values, backgroundColor: '#ff7675' }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } } });
         }
 
         function renderTopTable(topProductsList) {
             const tbody = document.querySelector('#topProdTable tbody');
             tbody.innerHTML = '';
-            
-            // topProductsList bây giờ là một mảng các object {name:..., count:...} đã sắp xếp
             topProductsList.forEach((item, idx) => {
-                const row = `<tr>
-                    <td><span class="rank-badge">${idx+1}</span> ${item.name}</td>
-                    <td style="font-weight:bold; color:#d63031;">${item.count}</td>
-                </tr>`;
+                const row = `<tr><td><span class="rank-badge">${idx+1}</span> ${item.name}</td><td style="font-weight:bold; color:#d63031;">${item.count}</td></tr>`;
                 tbody.innerHTML += row;
             });
         }

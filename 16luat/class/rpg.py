@@ -8,7 +8,6 @@ import base64
 from collections import defaultdict
 import numpy as np
 
-
 class RPG:
     def __init__(self):
         self.graph = nx.DiGraph()
@@ -48,9 +47,13 @@ class RPG:
     def build_graph(self):
         """
         Xay dung RPG: Nodes la cac LUAT (rules)
-        Edges: Neu ve phai cua rule A xuat hien trong ve trai cua rule B 
-        -> ve edge tu A -> B (A la tien de cua B)
+        Dinh nghia: Mot luat r_i la lien he truoc cua luat r_j (r_i -> r_j)
+        khi va chi khi ton tai su kien f thoa man:
+        r_i: left -> f
+        r_j: ... f ... -> q
         """
+        self.graph.clear()
+        
         # Them tat ca cac rules vao graph nhu la nodes
         for rule in self.rules:
             rule_id = rule['id']
@@ -61,27 +64,28 @@ class RPG:
                 consequent=rule['consequent']
             )
         
-        # Tao edges: Neu consequent cua rule_i xuat hien trong antecedents cua rule_j
-        # thi ve edge tu rule_i -> rule_j
+        # Tao edges dua tren quan he tien de (Precedence)
         for i, rule_i in enumerate(self.rules):
-            consequent_i = rule_i['consequent']
+            consequent_i = rule_i['consequent'] # f cua rule i
             rule_id_i = rule_i['id']
             
             for j, rule_j in enumerate(self.rules):
                 if i == j:
                     continue
                     
-                antecedents_j = rule_j['antecedents']
+                antecedents_j = rule_j['antecedents'] # left cua rule j
                 rule_id_j = rule_j['id']
                 
-                # Kiem tra neu consequent cua rule_i co trong antecedents cua rule_j
+                # Neu f thuoc left cua rule j -> Tao cung (ri, rj)
                 if consequent_i in antecedents_j:
                     self.graph.add_edge(rule_id_i, rule_id_j)
     
     def visualize_to_base64(self, figsize=(26, 18)):
         """
-        Ve RPG: Nodes la cac LUAT, Edges la quan he tien de
-        SU DUNG KAMADA-KAWAI LAYOUT VOI MUI TEN RO RANG
+        Ve RPG theo ly thuyet:
+        - Nodes: Luat
+        - R_GT: Tap luat thoa man ngay tu dau (left la tap con cua GT)
+        - R_KL: Tap luat thoa man ket luan (right la tap con cua KL)
         """
         fig = plt.figure(figsize=figsize, facecolor='white')
         ax = fig.add_subplot(111)
@@ -98,113 +102,121 @@ class RPG:
             plt.close(fig)
             return image_base64
         
-        # SU DUNG KAMADA-KAWAI LAYOUT
+        # SU DUNG KAMADA-KAWAI LAYOUT nhu yeu cau
         pos = self._get_kamada_kawai_layout()
         
-        # ========== VE EDGES VOI MUI TEN RO RANG ==========
+        # ========== VE EDGES ==========
         for (source, target) in self.graph.edges():
             x1, y1 = pos[source]
             x2, y2 = pos[target]
             
-            # Tinh vector direction
             dx = x2 - x1
             dy = y2 - y1
             length = np.sqrt(dx**2 + dy**2)
             
             if length > 0.01:
-                # Normalize direction
                 norm_dx = dx / length
                 norm_dy = dy / length
                 
-                # Rut ngan duong de tranh che node
                 radius = 2.0
                 start_x = x1 + norm_dx * radius
                 start_y = y1 + norm_dy * radius
-                end_x = x2 - norm_dx * (radius + 0.6)  # Tru them cho mui ten
+                end_x = x2 - norm_dx * (radius + 0.6)
                 end_y = y2 - norm_dy * (radius + 0.6)
                 
-                # Tinh chieu dai vector
                 arrow_dx = end_x - start_x
                 arrow_dy = end_y - start_y
                 
-                # Ve MUI TEN TO VA RO RANG
                 ax.arrow(start_x, start_y,
                         arrow_dx, arrow_dy,
-                        head_width=0.7,      # MUI TEN TO
-                        head_length=0.6,     # MUI TEN DAI
+                        head_width=0.7,
+                        head_length=0.6,
                         fc='black',          
                         ec='black',
-                        linewidth=2.5,       # DUONG DAY
+                        linewidth=2.0,
                         length_includes_head=True,
                         zorder=2,
                         alpha=0.9)
         
-        # ========== VE NODES (CAC LUAT) ==========
+        # ========== VE NODES (XU LY LOGIC MOI) ==========
         for node in self.graph.nodes():
             x, y = pos[node]
             
             node_data = self.graph.nodes[node]
+            antecedents = node_data.get('antecedents', [])
             consequent = node_data.get('consequent', '')
             
-            # Xac dinh loai node: R_GT, R_KL, hoac binh thuong
-            is_R_GT = any(ant in self.initial_facts for ant in node_data.get('antecedents', []))
+            # LOGIC MOI: Dinh nghia R_GT theo tap hop
+            # R_GT = {r : left -> q | left subset GT}
+            # Tat ca cac tien de cua luat phai nam trong GT
+            is_R_GT = False
+            if antecedents:
+                is_R_GT = set(antecedents).issubset(self.initial_facts)
+            
+            # LOGIC MOI: Dinh nghia R_KL
+            # R_KL = {r : left -> q | q subset KL}
             is_R_KL = consequent in self.target_goals
             
-            radius = 1.8  # Vong tron TO
+            radius = 1.8
             
-            # Ve vong tron voi pattern khac nhau
+            # Ve node dua tren phan loai
             if is_R_GT:
-                # Rule trong R_GT (gach ngang)
+                # Rule thuoc R_GT (Gach ngang nhu hinh minh hoa)
                 circle = plt.Circle((x, y), radius, facecolor='white',
-                                   edgecolor='black', linewidth=3.5, zorder=5)
+                                   edgecolor='black', linewidth=3.0, zorder=5)
                 ax.add_patch(circle)
+                # Pattern gach ngang
                 hatch_circle = plt.Circle((x, y), radius, facecolor='none',
-                                         edgecolor='black', linewidth=3.5,
-                                         hatch='---', zorder=6)
+                                         edgecolor='black', linewidth=0,
+                                         hatch='---', zorder=6, alpha=0.6)
                 ax.add_patch(hatch_circle)
+                
             elif is_R_KL:
-                # Rule trong R_KL (gach cheo)
+                # Rule thuoc R_KL (Gach cheo/doc nhu hinh minh hoa)
                 circle = plt.Circle((x, y), radius, facecolor='white',
-                                   edgecolor='black', linewidth=3.5, zorder=5)
+                                   edgecolor='black', linewidth=3.0, zorder=5)
                 ax.add_patch(circle)
+                # Pattern gach doc/cheo
                 hatch_circle = plt.Circle((x, y), radius, facecolor='none',
-                                         edgecolor='black', linewidth=3.5,
-                                         hatch='///', zorder=6)
+                                         edgecolor='black', linewidth=0,
+                                         hatch='|||', zorder=6, alpha=0.6)
                 ax.add_patch(hatch_circle)
             else:
-                # Rule binh thuong
+                # Rule trung gian (Hinh tron trang)
                 circle = plt.Circle((x, y), radius, facecolor='white',
-                                   edgecolor='black', linewidth=3.5, zorder=5)
+                                   edgecolor='black', linewidth=3.0, zorder=5)
                 ax.add_patch(circle)
             
-            # Label node: hien thi ID cua rule (r1, r2, ...)
+            # Label ID cua rule
             rule_label = f"r{node}"
             ax.text(x, y, rule_label, ha='center', va='center',
-                   fontsize=11, fontweight='bold', color='black', zorder=7)
+                   fontsize=12, fontweight='bold', color='black', zorder=7)
         
-        # ========== LEGEND ==========
+        # ========== LEGEND (CAP NHAT THEO LY THUYET) ==========
+        #
         legend_elements = [
             mpatches.Circle((0, 0), 0.35, facecolor='white', edgecolor='black',
-                           hatch='---', linewidth=2.5, label='Luat r ∈ R_GT'),
+                           hatch='---', linewidth=2.0, label=r'Luật $r \in R_{GT}$ (left $\subseteq$ GT)'),
             mpatches.Circle((0, 0), 0.35, facecolor='white', edgecolor='black',
-                           hatch='///', linewidth=2.5, label='Luat r ∈ R_KL')
+                           hatch='|||', linewidth=2.0, label=r'Luật $r \in R_{KL}$ (q $\subseteq$ KL)'),
+            mpatches.Circle((0, 0), 0.35, facecolor='white', edgecolor='black',
+                           linewidth=2.0, label='Luật trung gian')
         ]
         
         ax.legend(handles=legend_elements, loc='lower right',
-                 fontsize=13, framealpha=0.98, edgecolor='black',
-                 fancybox=False)
+                 fontsize=14, framealpha=0.95, edgecolor='black',
+                 fancybox=True, title="Chú thích loại luật")
         
-        # ========== TITLE & LAYOUT ==========
-        ax.set_title('Bieu do RPG (Rules Precedence Graph)\nNodes: Luat, Edges: Quan he tien de',
-                    fontsize=17, fontweight='bold', pad=25)
+        # ========== TITLE ==========
+        ax.set_title('Đồ thị liên hệ trước giữa các luật RPG (Rules Precedence Graph)',
+                    fontsize=18, fontweight='bold', pad=20)
         ax.axis('off')
         ax.set_aspect('equal')
         
-        # Set limits
         if pos:
             x_values = [pos[n][0] for n in pos]
             y_values = [pos[n][1] for n in pos]
-            margin = 2.5
+            margin = 3.0
             ax.set_xlim(min(x_values) - margin, max(x_values) + margin)
             ax.set_ylim(min(y_values) - margin, max(y_values) + margin)
         
@@ -219,53 +231,30 @@ class RPG:
         return image_base64
     
     def _get_kamada_kawai_layout(self):
-        """
-        KAMADA-KAWAI LAYOUT - minimize energy, tot cho graph vua va nho
-        """
+        """GIU NGUYEN LAYOUT CU"""
         try:
             pos = nx.kamada_kawai_layout(
                 self.graph,
-                scale=40.0  # Scale lon de trai rong
+                scale=40.0
             )
-            
-            # Day nodes ra xa tam
             pos = self._push_to_edges_rpg(pos, push_factor=1.5)
-            
             return pos
         except:
-            # Fallback neu kamada_kawai fail (vi du: graph qua lon)
             return self._get_spring_layout_rpg()
     
     def _push_to_edges_rpg(self, pos, push_factor=1.5):
-        """Day nodes ra xa tam"""
-        if not pos:
-            return pos
-        
+        if not pos: return pos
         pushed_pos = {}
-        
         x_values = [x for x, y in pos.values()]
         y_values = [y for x, y in pos.values()]
         center_x = np.mean(x_values)
         center_y = np.mean(y_values)
-        
         for node, (x, y) in pos.items():
             dx = x - center_x
             dy = y - center_y
-            
-            new_x = center_x + dx * push_factor
-            new_y = center_y + dy * push_factor
-            
-            pushed_pos[node] = (new_x, new_y)
-        
+            pushed_pos[node] = (center_x + dx * push_factor, center_y + dy * push_factor)
         return pushed_pos
     
     def _get_spring_layout_rpg(self):
-        """Spring layout cho RPG (fallback)"""
-        pos = nx.spring_layout(
-            self.graph,
-            k=9.0,
-            iterations=150,
-            scale=40.0,
-            seed=42
-        )
+        pos = nx.spring_layout(self.graph, k=9.0, iterations=150, scale=40.0, seed=42)
         return pos

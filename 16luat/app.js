@@ -1,4 +1,4 @@
-// API Configuration
+// app.js
 const API_URL = 'http://localhost:5000';
 let allRules = [];
 let savedInitialFacts = [];
@@ -19,18 +19,28 @@ menuItems.forEach(item => {
     });
 });
 
-// ==================== LOAD INITIAL DATA ====================
+// ==================== LOAD DATA FROM SERVER ====================
 window.addEventListener('DOMContentLoaded', function() {
-    loadInitialData();
+    fetchRulesFromServer();
 });
 
-function loadInitialData() {
-    const table = document.getElementById('ruleTable');
-    const tbody = table.getElementsByTagName('tbody')[0];
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Chưa có dữ liệu. Vui lòng tải lên file luật.</td></tr>';
+async function fetchRulesFromServer() {
+    try {
+        const response = await fetch(`${API_URL}/rules`);
+        const rules = await response.json();
+        allRules = rules;
+        if (allRules.length > 0) {
+            hienThiBangLuat(allRules);
+        } else {
+            const tbody = document.getElementById('ruleTable').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Chưa có dữ liệu. Vui lòng tải lên file luật hoặc thêm mới.</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading rules:', error);
+    }
 }
 
-// ==================== UPLOAD FILE ====================
+// ==================== UPLOAD FILE & SAVE TO SERVER ====================
 function taiLenTapLuat(event) {
     const file = event.target.files[0];
     const statusDiv = document.getElementById('uploadStatus');
@@ -53,19 +63,16 @@ function taiLenTapLuat(event) {
                 return;
             }
             
-            allRules = jsonData.map(row => ({
-                id: row.ID || row.id || '',
-                veTrai: row['Ve Trai'] || row.veTrai || '',
-                vePhai: row['Ve Phai'] || row.vePhai || '',
-                note: row.Note || row.note || ''
+            // Parse data
+            const parsedRules = jsonData.map(row => ({
+                id: (row.ID || row.id || '').toString(),
+                veTrai: (row['Ve Trai'] || row.veTrai || '').toString(),
+                vePhai: (row['Ve Phai'] || row.vePhai || '').toString(),
+                note: (row.Note || row.note || '').toString()
             }));
             
-            hienThiBangLuat(allRules);
-            statusDiv.innerHTML = `<div class="success">✅ Đã tải lên thành công ${allRules.length} luật!</div>`;
-            
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 3000);
+            // Gửi lên server để lưu
+            saveRulesToServer(parsedRules, statusDiv);
             
         } catch (error) {
             console.error('Error:', error);
@@ -74,6 +81,29 @@ function taiLenTapLuat(event) {
     };
     
     reader.readAsArrayBuffer(file);
+}
+
+async function saveRulesToServer(rules, statusDiv) {
+    try {
+        const response = await fetch(`${API_URL}/rules/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rules: rules })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            allRules = rules;
+            hienThiBangLuat(allRules);
+            statusDiv.innerHTML = `<div class="success">✅ ${result.message}</div>`;
+            setTimeout(() => { statusDiv.innerHTML = ''; }, 3000);
+        } else {
+            statusDiv.innerHTML = `<div class="error">❌ Lỗi server: ${result.error}</div>`;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = '<div class="error">❌ Không thể kết nối đến server để lưu!</div>';
+    }
 }
 
 function hienThiBangLuat(rules) {
@@ -95,6 +125,8 @@ function hienThiBangLuat(rules) {
     });
 }
 
+// ==================== CRUD ACTIONS (SYNC WITH SERVER) ====================
+
 function searchRules() {
     const input = document.getElementById('searchBox').value.toLowerCase();
     const tbody = document.getElementById('ruleTable').getElementsByTagName('tbody')[0];
@@ -106,18 +138,43 @@ function searchRules() {
     }
 }
 
-function themLuatMoi() {
-    const newId = allRules.length > 0 ? Math.max(...allRules.map(r => parseInt(r.id) || 0)) + 1 : 1;
-    const newRule = {
-        id: newId.toString(),
-        veTrai: prompt('Nhập vế trái (premise):') || '',
-        vePhai: prompt('Nhập vế phải (conclusion):') || '',
-        note: prompt('Nhập ghi chú (Note):') || ''
-    };
+async function themLuatMoi() {
+    // Tìm ID lớn nhất hiện tại để gợi ý (Server sẽ xử lý chính, nhưng client làm cho đẹp)
+    const maxId = allRules.length > 0 
+        ? Math.max(...allRules.map(r => parseInt(r.id) || 0)) 
+        : 0;
+        
+    const newId = (maxId + 1).toString();
     
-    if (newRule.veTrai && newRule.vePhai) {
-        allRules.push(newRule);
-        hienThiBangLuat(allRules);
+    const veTrai = prompt('Nhập vế trái (premise):');
+    if (veTrai === null) return; 
+    
+    const vePhai = prompt('Nhập vế phải (conclusion):');
+    if (vePhai === null) return;
+
+    const note = prompt('Nhập ghi chú (Note):') || '';
+
+    if (veTrai && vePhai) {
+        const newRule = { id: newId, veTrai, vePhai, note };
+        
+        try {
+            const response = await fetch(`${API_URL}/rules/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rule: newRule })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                allRules = result.rules;
+                hienThiBangLuat(allRules);
+                alert('✅ Đã thêm luật mới và lưu vào server!');
+            } else {
+                alert('❌ Lỗi: ' + result.error);
+            }
+        } catch (error) {
+            alert('❌ Lỗi kết nối server');
+        }
     }
 }
 
@@ -130,10 +187,10 @@ function editRule(btn) {
     cells[3].innerHTML = `<input type="text" value="${cells[3].textContent}" style="width:100%">`;
     
     btn.textContent = '💾';
-    btn.onclick = function() { saveRule(btn); };
+    btn.onclick = function() { saveRuleEdit(btn); }; // Đổi tên hàm để tránh nhầm lẫn
 }
 
-function saveRule(btn) {
+async function saveRuleEdit(btn) {
     const row = btn.parentElement.parentElement;
     const cells = row.cells;
     const id = cells[0].textContent;
@@ -142,33 +199,60 @@ function saveRule(btn) {
     const vePhai = cells[2].querySelector('input').value;
     const note = cells[3].querySelector('input').value;
     
-    const ruleIndex = allRules.findIndex(r => r.id === id);
-    if (ruleIndex !== -1) {
-        allRules[ruleIndex].veTrai = veTrai;
-        allRules[ruleIndex].vePhai = vePhai;
-        allRules[ruleIndex].note = note;
-    }
+    const updatedRule = { id, veTrai, vePhai, note };
     
-    hienThiBangLuat(allRules);
+    try {
+        const response = await fetch(`${API_URL}/rules/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rule: updatedRule })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            allRules = result.rules;
+            hienThiBangLuat(allRules);
+        } else {
+            alert('❌ Lỗi: ' + result.error);
+            fetchRulesFromServer(); // Reload lại dữ liệu cũ nếu lỗi
+        }
+    } catch (error) {
+        alert('❌ Lỗi kết nối server');
+    }
 }
 
-function deleteRule(btn) {
-    if (!confirm('Bạn có chắc muốn xóa luật này?')) return;
+async function deleteRule(btn) {
+    if (!confirm('Bạn có chắc muốn xóa luật này vĩnh viễn?')) return;
     
     const row = btn.parentElement.parentElement;
     const id = row.cells[0].textContent;
     
-    allRules = allRules.filter(r => r.id !== id);
-    hienThiBangLuat(allRules);
+    try {
+        const response = await fetch(`${API_URL}/rules/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            allRules = result.rules;
+            hienThiBangLuat(allRules);
+        } else {
+            alert('❌ Lỗi: ' + result.error);
+        }
+    } catch (error) {
+        alert('❌ Lỗi kết nối server');
+    }
 }
 
-// ==================== FPG GENERATION ====================
+// ==================== GENERATE FPG ====================
 async function generateFPG() {
     const container = document.getElementById('fpgContainer');
     const loading = document.getElementById('fpgLoading');
     
     if (allRules.length === 0) {
-        alert('⚠️ Chưa có luật nào! Vui lòng tải file luật trước.');
+        alert('⚠️ Chưa có luật nào!');
         return;
     }
     
@@ -185,7 +269,7 @@ async function generateFPG() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                rules: allRules,
+                rules: allRules, // Gửi rules hiện tại (hoặc để null server tự load)
                 initial_facts: savedInitialFacts,
                 target_goals: savedGoals,
                 layout_method: 'kamada_kawai'
@@ -193,27 +277,25 @@ async function generateFPG() {
         });
         
         const result = await response.json();
-        
         if (result.success) {
             container.innerHTML = `<img src="data:image/png;base64,${result.image}" alt="FPG Graph" style="max-width: 100%;">`;
         } else {
             container.innerHTML = `<p class="error">❌ ${result.error}</p>`;
         }
     } catch (error) {
-        console.error('FPG Error:', error);
-        container.innerHTML = '<p class="error">❌ Không thể kết nối đến server</p>';
+        container.innerHTML = '<p class="error">❌ Lỗi kết nối</p>';
     } finally {
         loading.style.display = 'none';
     }
 }
 
-// ==================== RPG GENERATION ====================
+// ==================== GENERATE RPG ====================
 async function generateRPG() {
     const container = document.getElementById('rpgContainer');
     const loading = document.getElementById('rpgLoading');
     
     if (allRules.length === 0) {
-        alert('⚠️ Chưa có luật nào! Vui lòng tải file luật trước.');
+        alert('⚠️ Chưa có luật nào!');
         return;
     }
     
@@ -232,19 +314,18 @@ async function generateRPG() {
         });
         
         const result = await response.json();
-        
         if (result.success) {
             container.innerHTML = `<img src="data:image/png;base64,${result.image}" alt="RPG Graph" style="max-width: 100%;">`;
         } else {
             container.innerHTML = `<p class="error">❌ ${result.error}</p>`;
         }
     } catch (error) {
-        console.error('RPG Error:', error);
-        container.innerHTML = '<p class="error">❌ Không thể kết nối đến server</p>';
+        container.innerHTML = '<p class="error">❌ Lỗi kết nối</p>';
     } finally {
         loading.style.display = 'none';
     }
 }
+
 // ==================== FORWARD INFERENCE ====================
 async function suydienChiTiet() {
     const giathiet = document.getElementById('giathiet').value;
@@ -252,24 +333,13 @@ async function suydienChiTiet() {
     const ketQua = document.getElementById('ketQuaSuyDienChiTiet');
     const bangQuaTrinh = document.getElementById('bang-qua-trinh');
     
-    if (!giathiet.trim()) {
-        alert('⚠️ Vui lòng nhập giả thiết ban đầu!');
-        return;
-    }
-    
-    if (!ketqua.trim()) {
-        alert('⚠️ Vui lòng nhập kết luận cần tìm!');
-        return;
-    }
-    
-    if (allRules.length === 0) {
-        alert('⚠️ Chưa có luật nào trong hệ thống!');
+    if (!giathiet.trim() || !ketqua.trim()) {
+        alert('⚠️ Vui lòng nhập giả thiết và kết luận!');
         return;
     }
     
     const initialFacts = giathiet.split(',').map(f => f.trim()).filter(f => f);
     const goals = ketqua.split(',').map(g => g.trim()).filter(g => g);
-    
     savedInitialFacts = initialFacts;
     savedGoals = goals;
     
@@ -288,84 +358,50 @@ async function suydienChiTiet() {
         });
         
         const result = await response.json();
-        
         if (result.success) {
             let html = `
                 <div class="success-box">
                     <h3>✅ Suy diễn tiến thành công!</h3>
-                    <p><strong>Giả thiết ban đầu (GT):</strong> {${result.initial_facts.join(', ')}}</p>
-                    <p><strong>Kết luận cần tìm (KL):</strong> {${result.goals.join(', ')}}</p>
-                    <p><strong>Vết suy diễn (VET):</strong> ${result.optimal_vet.map(r => 'r' + r).join(' → ')}</p>
-                </div>
-            `;
+                    <p><strong>Vết suy diễn:</strong> ${result.optimal_vet.map(r => 'r' + r).join(' → ')}</p>
+                </div>`;
             
-            if (result.explanation && result.explanation.length > 0) {
-                html += '<h3>📝 Chi tiết các bước tính toán:</h3>';
+            if (result.explanation) {
+                html += '<h3>📝 Chi tiết các bước:</h3>';
                 result.explanation.forEach(step => {
-                    html += `
-                        <div class="step-detail">
-                            <strong>Bước ${step.step}:</strong> Áp dụng luật r${step.rule}<br>
-                            <strong>Tiền đề:</strong> {${step.premise.join(', ')}}<br>
-                            <strong>Kết luận:</strong> ${step.conclusion}<br>
-                            ${step.note ? `<strong style="color: #3498db;">📐 Công thức:</strong> ${step.note}` : ''}
-                        </div>
-                    `;
+                    html += `<div class="step-detail">
+                            <strong>Bước ${step.step} (r${step.rule}):</strong> {${step.premise.join(', ')}} → ${step.conclusion}
+                        </div>`;
                 });
             }
-            
             ketQua.innerHTML = html;
-            
-            if (result.process_table && result.process_table.length > 0) {
+            if (result.process_table) {
                 displayForwardProcessTable(result.process_table);
                 bangQuaTrinh.style.display = 'block';
             }
-            
         } else {
-            ketQua.innerHTML = `
-                <div class="error-box">
-                    <h3>❌ Không thể chứng minh kết luận từ giả thiết đã cho</h3>
-                    <p><strong>Giả thiết:</strong> {${result.initial_facts.join(', ')}}</p>
-                    <p><strong>Kết quả cần tìm:</strong> {${result.goals.join(', ')}}</p>
-                </div>
-            `;
+            ketQua.innerHTML = `<div class="error-box"><h3>❌ Thất bại</h3><p>${result.conclusion}</p></div>`;
         }
-        
     } catch (error) {
-        console.error('Forward Inference Error:', error);
-        ketQua.innerHTML = `
-            <div class="error-box">
-                <h3>❌ Không thể kết nối đến server</h3>
-                <p>Vui lòng kiểm tra server đang chạy tại <code>http://localhost:5000</code></p>
-            </div>
-        `;
+        ketQua.innerHTML = '<div class="error-box">❌ Lỗi server</div>';
     }
 }
 
 function displayForwardProcessTable(processTable) {
     const tbody = document.getElementById('process-table-body');
     tbody.innerHTML = '';
-    
     processTable.forEach(row => {
         const tr = document.createElement('tr');
-        
-        if (row.rule === 'DONE') {
-            tr.style.backgroundColor = '#d4edda';
-            tr.style.fontWeight = 'bold';
-        } else if (row.rule === 'FAIL') {
-            tr.style.backgroundColor = '#f8d7da';
-            tr.style.fontWeight = 'bold';
-        }
+        if (row.rule === 'DONE') tr.style.backgroundColor = '#d4edda';
+        if (row.rule === 'FAIL') tr.style.backgroundColor = '#f8d7da';
         
         tr.innerHTML = `
             <td>${row.step}</td>
-            <td>${row.rule || '-'}</td>
+            <td>${row.rule}</td>
             <td>{${row.THOA.join(', ')}}</td>
             <td>{${row.TG.join(', ')}}</td>
             <td>[${row.R.join(', ')}]</td>
             <td>[${row.VET.join(', ')}]</td>
-            <td style="text-align: left; font-size: 11px;">
-                ${row.note ? `<strong style="color: #3498db;">📝</strong> ${row.note}` : '-'}
-            </td>
+            <td style="text-align: left; font-size: 11px;">${row.note || '-'}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -374,8 +410,7 @@ function displayForwardProcessTable(processTable) {
 function resetInference() {
     document.getElementById('giathiet').value = '';
     document.getElementById('ketqua').value = '';
-    document.getElementById('ketQuaSuyDienChiTiet').innerHTML = 
-        'Nhập giả thiết và kết quả cần tìm, sau đó nhấn "Thực hiện suy diễn tiến"...';
+    document.getElementById('ketQuaSuyDienChiTiet').innerHTML = '...';
     document.getElementById('bang-qua-trinh').style.display = 'none';
 }
 
@@ -387,24 +422,13 @@ async function suydienLui() {
     const bangQuaTrinh = document.getElementById('bang-qua-trinh-backward');
     const traceSection = document.getElementById('backward-trace-section');
     
-    if (!giathiet.trim()) {
-        alert('⚠️ Vui lòng nhập giả thiết ban đầu!');
-        return;
-    }
-    
-    if (!ketqua.trim()) {
-        alert('⚠️ Vui lòng nhập kết luận cần chứng minh!');
-        return;
-    }
-    
-    if (allRules.length === 0) {
-        alert('⚠️ Chưa có luật nào trong hệ thống!');
+    if (!giathiet.trim() || !ketqua.trim()) {
+        alert('⚠️ Vui lòng nhập giả thiết và kết luận!');
         return;
     }
     
     const initialFacts = giathiet.split(',').map(f => f.trim()).filter(f => f);
     const goals = ketqua.split(',').map(g => g.trim()).filter(g => g);
-    
     savedInitialFacts = initialFacts;
     savedGoals = goals;
     
@@ -424,61 +448,32 @@ async function suydienLui() {
         });
         
         const result = await response.json();
-        
         if (result.success) {
             let html = `
                 <div class="backward-success">
                     <h3>✅ Suy diễn lùi thành công!</h3>
-                    <p><strong>Giả thiết ban đầu (GT):</strong> {${result.initial_facts.join(', ')}}</p>
-                    <p><strong>Kết luận cần chứng minh (KL):</strong> {${result.goals.join(', ')}}</p>
-                    <p><strong>Vết đầy đủ (Backward order):</strong> ${result.full_vet.map(r => 'r' + r).join(' ← ')}</p>
-                    <p><strong>Vết tối ưu (Forward order để áp dụng):</strong> ${result.optimal_vet.map(r => 'r' + r).join(' → ')}</p>
-                </div>
-            `;
+                    <p><strong>Vết tối ưu:</strong> ${result.optimal_vet.map(r => 'r' + r).join(' → ')}</p>
+                </div>`;
             
-            if (result.explanation && result.explanation.length > 0) {
-                html += '<h3>📝 Chi tiết các bước tính toán (theo thứ tự áp dụng):</h3>';
+            if (result.explanation) {
+                html += '<h3>📝 Chi tiết:</h3>';
                 result.explanation.forEach(step => {
-                    html += `
-                        <div class="backward-step-detail">
-                            <strong>Bước ${step.step}:</strong> Áp dụng luật r${step.rule}<br>
-                            <strong>Tiền đề cần có:</strong> {${step.premise.join(', ')}}<br>
-                            <strong>Để suy ra:</strong> ${step.conclusion}<br>
-                            ${step.note ? `<strong style="color: #e74c3c;">📐 Công thức:</strong> ${step.note}` : ''}
-                        </div>
-                    `;
+                    html += `<div class="backward-step-detail">
+                            <strong>Bước ${step.step} (r${step.rule}):</strong> Cần {${step.premise.join(', ')}} để có ${step.conclusion}
+                        </div>`;
                 });
             }
-            
             ketQua.innerHTML = html;
-            
-            if (result.process_table && result.process_table.length > 0) {
+            if (result.process_table) {
                 displayBackwardProcessTable(result.process_table);
                 bangQuaTrinh.style.display = 'block';
             }
-            
             getBackwardTrace(initialFacts, goals);
-            
         } else {
-            ketQua.innerHTML = `
-                <div class="backward-error">
-                    <h3>❌ Không thể chứng minh kết luận từ giả thiết đã cho</h3>
-                    <p><strong>Giả thiết:</strong> {${result.initial_facts.join(', ')}}</p>
-                    <p><strong>Kết quả cần tìm:</strong> {${result.goals.join(', ')}}</p>
-                    <p><strong>Lý do:</strong> Không tìm thấy chuỗi luật nào để chứng minh từ GT đến KL</p>
-                </div>
-            `;
+            ketQua.innerHTML = `<div class="backward-error"><h3>❌ Thất bại</h3><p>${result.conclusion}</p></div>`;
         }
-        
     } catch (error) {
-        console.error('Backward Inference Error:', error);
-        ketQua.innerHTML = `
-            <div class="backward-error">
-                <h3>❌ Không thể kết nối đến server</h3>
-                <p>Vui lòng kiểm tra server đang chạy tại <code>http://localhost:5000</code></p>
-                <p><strong>Error:</strong> ${error.message}</p>
-            </div>
-        `;
+        ketQua.innerHTML = '<div class="backward-error">❌ Lỗi server</div>';
     }
 }
 
@@ -487,83 +482,43 @@ async function getBackwardTrace(initialFacts, goals) {
         const response = await fetch(`${API_URL}/backward_inference_trace`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                rules: allRules,
-                initial_facts: initialFacts,
-                goals: goals
-            })
+            body: JSON.stringify({ rules: allRules, initial_facts: initialFacts, goals: goals })
         });
-        
         const result = await response.json();
-        
         if (result.success && result.trace) {
             displayBackwardTrace(result.trace);
             document.getElementById('backward-trace-section').style.display = 'block';
         }
-    } catch (error) {
-        console.error('Trace Error:', error);
-    }
+    } catch (e) { console.error(e); }
 }
 
 function displayBackwardTrace(trace) {
     const container = document.getElementById('traceContainer');
     let html = '<div style="text-align: center; font-size: 18px; line-height: 2.5;">';
-    
     trace.forEach((item, index) => {
-        const setStr = item.set.length === 0 || (item.set.length === 1 && item.set[0] === '∅') 
-            ? '∅' 
-            : `{${item.set.join(', ')}}`;
-        
+        const setStr = item.set.length === 0 || (item.set.length === 1 && item.set[0] === '∅') ? '∅' : `{${item.set.join(', ')}}`;
         html += `<span class="trace-step">${setStr}</span>`;
-        
-        if (item.rule) {
-            html += `<span class="trace-rule">${item.rule}</span>`;
-        }
-        
-        if (index < trace.length - 1) {
-            html += `<span class="trace-arrow">←</span>`;
-        }
+        if (item.rule) html += `<span class="trace-rule">${item.rule}</span>`;
+        if (index < trace.length - 1) html += `<span class="trace-arrow">←</span>`;
     });
-    
     html += '</div>';
-    
-    // Add note explanation
-    html += '<div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 5px;">';
-    html += '<strong>💡 Giải thích Trace:</strong><br>';
-    html += 'Đọc từ trái sang phải: Bắt đầu từ KL, thay thế dần bằng tiền đề của các luật cho đến khi tất cả đều có trong GT.<br>';
-    html += 'Mũi tên ← biểu thị quá trình backward (tìm ngược).';
-    html += '</div>';
-    
     container.innerHTML = html;
 }
 
 function displayBackwardProcessTable(processTable) {
     const tbody = document.getElementById('process-table-body-backward');
     tbody.innerHTML = '';
-    
     processTable.forEach(row => {
         const tr = document.createElement('tr');
-        
-        if (row.rule === 'DONE') {
-            tr.style.backgroundColor = '#d4edda';
-            tr.style.fontWeight = 'bold';
-            tr.style.color = '#155724';
-        } else if (row.rule === 'FAIL') {
-            tr.style.backgroundColor = '#f8d7da';
-            tr.style.fontWeight = 'bold';
-            tr.style.color = '#721c24';
-        }
-        
+        if (row.rule === 'DONE') tr.style.backgroundColor = '#d4edda';
+        if (row.rule === 'FAIL') tr.style.backgroundColor = '#f8d7da';
         tr.innerHTML = `
             <td>${row.step}</td>
-            <td>${row.rule || '-'}</td>
+            <td>${row.rule}</td>
             <td>{${row.current_goals.join(', ')}}</td>
             <td>{${row.GT.join(', ')}}</td>
             <td>[${row.VET.join(', ')}]</td>
-            <td style="text-align: left; font-size: 11px;">
-                <strong>Giải thích:</strong> ${row.explanation}<br>
-                ${row.note ? `<strong style="color: #e74c3c;">📝 Công thức:</strong> ${row.note}` : ''}
-            </td>
+            <td style="text-align: left;">${row.explanation}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -572,8 +527,7 @@ function displayBackwardProcessTable(processTable) {
 function resetBackwardInference() {
     document.getElementById('giathiet_backward').value = '';
     document.getElementById('ketqua_backward').value = '';
-    document.getElementById('ketQuaSuyDienLui').innerHTML = 
-        'Nhập giả thiết và kết luận cần chứng minh, sau đó nhấn "Thực hiện suy diễn lùi"...';
+    document.getElementById('ketQuaSuyDienLui').innerHTML = '...';
     document.getElementById('bang-qua-trinh-backward').style.display = 'none';
     document.getElementById('backward-trace-section').style.display = 'none';
 }
